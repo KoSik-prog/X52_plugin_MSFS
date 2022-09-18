@@ -6,14 +6,6 @@
 #include <QTime>
 #include <QSignalMapper>
 #include <QTimer>
-extern "C" {
-    #include "SimConnect.h"
-}
-
-#include "x52_output.h"
-#include "DirectOutput.h"
-
-#include "structures_simconnect.h"
 #include <QtXml>
 #include <QFile>
 #include <QPixmap>
@@ -21,6 +13,15 @@ extern "C" {
 #include <QMessageBox>
 #include <QSpacerItem>
 #include <QGridLayout>
+
+#include "x52_output.h"
+#include "DirectOutput.h"
+#include "structures_simconnect.h"
+
+extern "C" {
+    #include "SimConnect.h"
+}
+
 
 QStringList LEDS_FUNCTIONS = {
     "RED",
@@ -72,47 +73,40 @@ QStringList MFD_FUNCTIONS = {
     "AP_CRS2"
 };
 
+#define MFD_REFRESH_TIME 100
+#define STATUSBAR_TIMEOUT 3000 // x 1000 = seconds
 
-uint8_t autocon_time = 0; //przechwanie sekund do autoconnect
-#define MFD_REF_TIME 100 //czas odswiezania MFD
-
+uint8_t autocon_time = 0;
 uint8_t flash_step = 0;
-QVector<QStringList> flash_intervall{{"0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0"},  //interwały błysków
+QVector<QStringList> flash_intervall{{"0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0"},  //flash intervals
                                      {"1", "0", "1", "0", "1", "0", "1", "0", "1", "0", "1", "0"},
                                      {"1", "1", "0", "0", "1", "1", "0", "0", "1", "1", "0", "0"},
                                      {"1", "1", "1", "1", "1", "1", "1", "1", "0", "0", "0", "0"},};
-QVector<int8_t> LEDflash {0,0,0,0,0,0,0,0,0,0,0}; //flaga czy miga i jednoczesnie numer interwału
-QVector<int8_t> LEDflashColour {0,0,0,0,0,0,0,0,0,0,0}; //kolor migania LED
-// ------------ DANE DLA X52 --------------------------------------------------------
+QVector<int8_t> LEDflash {0,0,0,0,0,0,0,0,0,0,0}; //flashFlag + flash interval number
+QVector<int8_t> LEDflashColour {0,0,0,0,0,0,0,0,0,0,0}; //flash color
+// ------------ DATA FOR X52 --------------------------------------------------------
 x52_output x52output;
 DWORD dwPage = 1;
 std::vector<void*> devices;
-QVector<QString> mfdLine {"AP_CRS1", "AP_HDG", "AP_VS", ""};
-QVector<QString> diody {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""};
+QVector<QString> mfdLine {"AP_CRS1", "AP_HDG", "AP_VS"};
+QVector<QString> ledsArray {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""};
 std::map<QString, int> dek {{"LED_FIRE", 0}, {"LED_FIRE_A", 1}, {"LED_FIRE_B", 3}, {"LED_FIRE_D", 5}, {"LED_FIRE_E", 7}, {"LED_TOGGLE_1_2", 9}, {"LED_TOGGLE_3_4", 11}, {"LED_TOGGLE_5_6", 13}, {"LED_POV_2", 15}, {"LED_CLUTCH", 17}, {"LED_THROTTLE", 19}};
-
-// -----------  DANE DLA SIMCONNECT --------------------------------------------------
+// ----------- DATA FOR SIMCONNECT --------------------------------------------------
 HANDLE hSimConnect = NULL;
 HANDLE hSimConnectLVAR = NULL;
-
-SIMCONNECT_CLIENT_DATA_ID ClientDataID = 1; // dla LVAR
-SIMCONNECT_OBJECT_ID objectID = SIMCONNECT_OBJECT_ID_USER; // dla LVAR
+SIMCONNECT_CLIENT_DATA_ID ClientDataID = 1; // for LVAR
+SIMCONNECT_OBJECT_ID objectID = SIMCONNECT_OBJECT_ID_USER; // for LVAR
 SIMCONNECT_RECV* pDataLVAR;
 
 HRESULT hr;
 SIMCONNECT_RECV* pData = NULL;
 DWORD cbData = 0;
 SIMCONNECT_RECV_SIMOBJECT_DATA* pObjData = NULL;
-
-
-//--------- DEKLARACJE FUNKCJI ----------------------------------------------------------
+//--------- FUNCTIONES DECLARATIONS ----------------------------------------------------------
 void XMLretrievPlanes(Ui::MainWindow *ui_pointer, QString tag, QString att);
 void XMLretrievButtons(Ui::MainWindow *ui_pointer, QString tag, QString arg1);
 void XMLsetAttribute(QDomDocument doc, QDomElement btns, QString name, QString func, uint8_t rodzaj);
 void SetLed(Ui::MainWindow *ui_pointer);
-
-
-#define STATUSBAR_TIMEOUT 3000 // x * 1000 = sekundy
 //---------------------------------------------------------
 void __stdcall DirectOutput_Device_Callback(void* hDevice, bool bAdded, void* pvContext) {
     if (bAdded) {
@@ -155,9 +149,10 @@ for(uint8_t i=0; i<LEDflash.capacity(); i++)
         }
     }
 flash_step++;
-if(flash_step > 11){
+if(flash_step > 11)
+    {
     flash_step = 0;
-}
+    }
 }
 
 void x52Flash(uint8_t nr, uint8_t intervall, uint8_t colour){
@@ -177,7 +172,7 @@ void x52Flash(uint8_t nr, uint8_t intervall, uint8_t colour){
 void MainWindow::SetLed(Ui::MainWindow *ui_pointer){
     SimConnect_DataRefs* SimConnect_Data = NULL;
     SimConnect_Data = (SimConnect_DataRefs*)&pObjData->dwData;
-    //  ---- dla LVAR ----------------
+    //  ---- for LVARs ----------------
     //WASM_FCU_DataRefs* pDataRefs_WASM_FCU = NULL;
     //SIMCONNECT_RECV_CLIENT_DATA* pObjData = (SIMCONNECT_RECV_CLIENT_DATA*)pDataLVAR;
     //pDataRefs_WASM_FCU = (WASM_FCU_DataRefs*)&pObjData->dwData;
@@ -201,7 +196,7 @@ void MainWindow::SetLed(Ui::MainWindow *ui_pointer){
                     x52output.writeLine(devices[0], dwPage, 1, (wchar_t*)L"");
                     x52output.writeLine(devices[0], dwPage, 2, (wchar_t*)L"");
                     delay(1500);
-                    TimerMFDrefresh->start(MFD_REF_TIME);
+                    TimerMFDrefresh->start(MFD_REFRESH_TIME);
                     break;
                 }
             }
@@ -209,16 +204,16 @@ void MainWindow::SetLed(Ui::MainWindow *ui_pointer){
         }
     }
 
-    //if(SimConnect_Data->batt_master > 10){  //jesli bateria wlaczona
+    //if(SimConnect_Data->batt_master > 10){  //if power on
         uint8_t i;
         for(i=0;i<19;i++){  //bo numer ostatniego led to 19
-            if (diody[i] == "RED"){
+            if (ledsArray[i] == "RED"){
                 x52output.color_led(devices[0], dwPage, i,0);
-            } else if (diody[i] == "GREEN"){
+            } else if (ledsArray[i] == "GREEN"){
                 x52output.color_led(devices[0], dwPage, i,1);
-            } else if (diody[i] == "ORANGE"){
+            } else if (ledsArray[i] == "ORANGE"){
                 x52output.color_led(devices[0], dwPage, i,2);
-            } else if(diody[i] == "GEAR"){
+            } else if(ledsArray[i] == "GEAR"){
                 if(SimConnect_Data->gear >0 && SimConnect_Data->gear <= 99){  //GEAR
                     x52output.color_led(devices[0], dwPage, i,2);
                 } else if (SimConnect_Data->gear == 100){
@@ -226,18 +221,18 @@ void MainWindow::SetLed(Ui::MainWindow *ui_pointer){
                 } else {
                     x52output.color_led(devices[0], dwPage, i,0);
                 }
-            } else if (diody[i] == "BRAKE"){
+            } else if (ledsArray[i] == "BRAKE"){
                 x52output.color_led(devices[0], dwPage, i,SimConnect_Data->brake); //NORMAL BRAKE
-            } else if (diody[i] == "PARKING_BRAKE"){
+            } else if (ledsArray[i] == "PARKING_BRAKE"){
                 x52output.color_led(devices[0], dwPage, i,SimConnect_Data->parkingbrake); //PARKING BRAKE
-            }else if (diody[i] == "PARK_BRK_COMBO"){
+            }else if (ledsArray[i] == "PARK_BRK_COMBO"){
                 if(SimConnect_Data->parkingbrake != 0){
                     x52Flash(i, 3, 1);
                 } else {
                     x52Flash(i, 0, 0);
                     x52output.color_led_flash(devices[0], dwPage, i, 0);
                 }
-            } else if (diody[i] == "BRAKES_COMBO"){
+            } else if (ledsArray[i] == "BRAKES_COMBO"){
                 if(SimConnect_Data->brake != 0 && SimConnect_Data->parkingbrake ==0){
                     x52output.color_led(devices[0], dwPage, i, 1);
                     x52Flash(i, 0, 0);
@@ -247,19 +242,19 @@ void MainWindow::SetLed(Ui::MainWindow *ui_pointer){
                     x52Flash(i, 0, 0);
                     x52output.color_led_flash(devices[0], dwPage, i, 0);
                 }
-            }  else if (diody[i] == "RPM_ENGINE_1"){
+            }  else if (ledsArray[i] == "RPM_ENGINE_1"){
                 if(SimConnect_Data->enginerpm1 >500){  //ENGINE 1 RPM
                     x52output.color_led(devices[0], dwPage, i,1);
                 } else {
                     x52output.color_led(devices[0], dwPage, i,0);
                 }
-            } else if (diody[i] == "RPM_ENGINE_2"){
+            } else if (ledsArray[i] == "RPM_ENGINE_2"){
                 if(SimConnect_Data->enginerpm2 >500){  //ENGINE 2 RPM
                     x52output.color_led(devices[0], dwPage, i,1);
                 } else {
                     x52output.color_led(devices[0], dwPage, i,0);
                 }
-            } else if (diody[i] == "FLAPS"){
+            } else if (ledsArray[i] == "FLAPS"){
                 if(SimConnect_Data->flaps >=10 && SimConnect_Data->flaps < 90){ //FLAPS
                     x52output.color_led(devices[0], dwPage, i,2);
                 } else if (SimConnect_Data->flaps >=90){
@@ -267,27 +262,27 @@ void MainWindow::SetLed(Ui::MainWindow *ui_pointer){
                 } else {
                     x52output.color_led(devices[0], dwPage, i,0);
                 }
-            }  else if (diody[i] == "LANDING_LIGHTS"){
+            }  else if (ledsArray[i] == "LANDING_LIGHTS"){
                 x52output.color_led(devices[0], dwPage, i,SimConnect_Data->lightlanding);
-            } else if (diody[i] == "AP_MASTER"){
+            } else if (ledsArray[i] == "AP_MASTER"){
                 x52output.color_led(devices[0], dwPage, i,SimConnect_Data->ap_master);
-            } else if (diody[i] == "REV_THRUST"){
+            } else if (ledsArray[i] == "REV_THRUST"){
                 if(SimConnect_Data->rev < 0){ //REVERSE THRUST
                     x52output.color_led(devices[0], dwPage, i,0);
                 } else {
                     x52output.color_led(devices[0], dwPage, i,1);
                 }
-            } else if (diody[i] == "TAXI_LIGHTS"){
+            } else if (ledsArray[i] == "TAXI_LIGHTS"){
                 x52output.color_led(devices[0], dwPage, i,SimConnect_Data->light_taxi);
-            }  else if (diody[i] == "NAV_LIGHTS"){
+            }  else if (ledsArray[i] == "NAV_LIGHTS"){
                 x52output.color_led(devices[0], dwPage, i,SimConnect_Data->light_nav);
-            } else if (diody[i] == "BEACON_LIGHTS"){
+            } else if (ledsArray[i] == "BEACON_LIGHTS"){
                 x52output.color_led(devices[0], dwPage, i,SimConnect_Data->light_beacon);
-            } else if (diody[i] == "STROBE_LIGHTS"){
+            } else if (ledsArray[i] == "STROBE_LIGHTS"){
                 x52output.color_led(devices[0], dwPage, i,SimConnect_Data->light_strobe);
-            } else if (diody[i] == "PANEL_LIGHTS"){
+            } else if (ledsArray[i] == "PANEL_LIGHTS"){
                 x52output.color_led(devices[0], dwPage, i,SimConnect_Data->light_panel);
-            } else if (diody[i] == "LIGHTS_COMBO"){
+            } else if (ledsArray[i] == "LIGHTS_COMBO"){
                 if(SimConnect_Data->light_taxi == 1 && SimConnect_Data->lightlanding == 1){
                     x52output.color_led(devices[0], dwPage, i,0);
                 } else if (SimConnect_Data->light_taxi == 1 && SimConnect_Data->lightlanding == 0){
@@ -297,21 +292,21 @@ void MainWindow::SetLed(Ui::MainWindow *ui_pointer){
                 } else {
                     x52output.color_led(devices[0], dwPage, i,-1);
                 }
-            } else if (diody[i] == "STALL_WARNING"){
+            } else if (ledsArray[i] == "STALL_WARNING"){
                 if(SimConnect_Data->stall_wrn == 1){
                     x52Flash(i, 1, 1);
                 } else {
                     x52Flash(i, 0, 0);
                     x52output.color_led(devices[0], dwPage, i,-1);
                 }
-            } else if (diody[i] == "OVERSPEED_WARNING"){
+            } else if (ledsArray[i] == "OVERSPEED_WARNING"){
                 if(SimConnect_Data->overspeed_wrn == 1){
                     x52Flash(i, 1, 1);
                 } else {
                     x52Flash(i, 0, 0);
                     x52output.color_led(devices[0], dwPage, i,-1);
                 }
-            } else if (diody[i] == "MARKERS"){
+            } else if (ledsArray[i] == "MARKERS"){
                 if(SimConnect_Data->inner_marker == 1){
                     x52Flash(i, 1, 1);
                 } else if(SimConnect_Data->middle_marker == 1){
@@ -322,30 +317,30 @@ void MainWindow::SetLed(Ui::MainWindow *ui_pointer){
                     x52Flash(i, 0, 0);
                     x52output.color_led(devices[0], dwPage, i, -1);
                 }
-            } else if (diody[i] == "INNER_MARKER"){
+            } else if (ledsArray[i] == "INNER_MARKER"){
                 if(SimConnect_Data->inner_marker == 1){
                     x52Flash(i, 1, 3);
                 } else {
                     x52Flash(i, 0, 0);
                     x52output.color_led(devices[0], dwPage, i,-1);
                 }
-            } else if (diody[i] == "MIDDLE_MARKER"){
+            } else if (ledsArray[i] == "MIDDLE_MARKER"){
                 if(SimConnect_Data->middle_marker == 1){
                     x52Flash(i, 1, 3);
                 } else {
                     x52Flash(i, 0, 0);
                     x52output.color_led(devices[0], dwPage, i,-1);
                 }
-            } else if (diody[i] == "OUTER_MARKER"){
+            } else if (ledsArray[i] == "OUTER_MARKER"){
                 if(SimConnect_Data->outer_marker == 1){
                     x52Flash(i, 1, 3);
                 } else {
                     x52Flash(i, 0, 0);
                     x52output.color_led(devices[0], dwPage, i,-1);
                 }
-            } else if (diody[i] == "SPOILERS_ARMED"){
+            } else if (ledsArray[i] == "SPOILERS_ARMED"){
                 x52output.color_led(devices[0], dwPage, i,SimConnect_Data->spoilers_armed);
-            } else if (diody[i] == "SPOILERS"){
+            } else if (ledsArray[i] == "SPOILERS"){
                 if(SimConnect_Data->spoilers_pos < 5){
                     x52output.color_led(devices[0], dwPage, i,0);
                 } else if (SimConnect_Data->spoilers_pos > 95){
@@ -353,17 +348,17 @@ void MainWindow::SetLed(Ui::MainWindow *ui_pointer){
                 } else {
                     x52output.color_led(devices[0], dwPage, i,2);
                 }
-            } else if (diody[i] == "AP_HDG_LOCK"){
+            } else if (ledsArray[i] == "AP_HDG_LOCK"){
                 x52output.color_led(devices[0], dwPage, i,SimConnect_Data->ap_hdg_lock);
-            } else if (diody[i] == "AP_NAV1_LOCK"){
+            } else if (ledsArray[i] == "AP_NAV1_LOCK"){
                 x52output.color_led(devices[0], dwPage, i,SimConnect_Data->ap_nav1_lock);
-            } else if (diody[i] == "AP_ALT_LOCK"){
+            } else if (ledsArray[i] == "AP_ALT_LOCK"){
                 x52output.color_led(devices[0], dwPage, i,SimConnect_Data->ap_alt_lock);
-            } else if (diody[i] == "AP_APP_LOCK"){
+            } else if (ledsArray[i] == "AP_APP_LOCK"){
                 x52output.color_led(devices[0], dwPage, i,SimConnect_Data->ap_app_lock);
-            } else if (diody[i] == "AUTOTHROTTLE_LOCK"){
+            } else if (ledsArray[i] == "AUTOTHROTTLE_LOCK"){
                 x52output.color_led(devices[0], dwPage, i,SimConnect_Data->autothrottle_lock);
-            } else if (diody[i] == "AP_COURSE_COMBO"){
+            } else if (ledsArray[i] == "AP_COURSE_COMBO"){
                 if(SimConnect_Data->ap_hdg_lock == 0 && SimConnect_Data->ap_nav1_lock == 0 && SimConnect_Data->ap_app_lock == 0){
                     x52output.color_led(devices[0], dwPage, i,-1);
                 } else if (SimConnect_Data->ap_app_lock == 1){
@@ -458,16 +453,13 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-
-    //---- zaladowanie obrazka -------------------------------------
     QPixmap pm(QApplication::applicationDirPath()+"/x52.png");
     ui->image_label->setPixmap(pm);
     ui->image_label->setScaledContents(false);
     ui->image_label->setGeometry(30, 100, pm.width(), pm.height());
-    //---- zaladowanie XML -----------------------------------------
-
+    //---- read XML -----------------------------------------
     XMLretrievPlanes(ui, "plane", "name");
-    //---- wczytanie funkcji dla LED ---------------------------------
+    //---- load LED functions ---------------------------------
     ui->fire_comboBox->addItems(LEDS_FUNCTIONS);
     ui->fire_comboBox->model()->sort(0, Qt::AscendingOrder);
     ui->fireA_comboBox->addItems(LEDS_FUNCTIONS);
@@ -490,14 +482,14 @@ MainWindow::MainWindow(QWidget *parent)
     ui->toggle34_comboBox->model()->sort(0, Qt::AscendingOrder);
     ui->toggle56_comboBox->addItems(LEDS_FUNCTIONS);
     ui->toggle56_comboBox->model()->sort(0, Qt::AscendingOrder);
-    //---- wczytanie funkcji dla MFD ---------------------------------
+    //---- read MFD functions ---------------------------------
     ui->mfd1_comboBox->addItems(MFD_FUNCTIONS);
     ui->mfd1_comboBox->model()->sort(0, Qt::AscendingOrder);
     ui->mfd2_comboBox->addItems(MFD_FUNCTIONS);
     ui->mfd2_comboBox->model()->sort(0, Qt::AscendingOrder);
     ui->mfd3_comboBox->addItems(MFD_FUNCTIONS);
     ui->mfd3_comboBox->model()->sort(0, Qt::AscendingOrder);
-    //---- ustawienie odczytanych danych -----------------------
+    //---- OTHERS ---------------------------------------------
     QString def = ui->profil_comboBox->currentText();
     XMLretrievButtons(ui, "plane", def);
 
@@ -509,18 +501,17 @@ MainWindow::MainWindow(QWidget *parent)
     x52output.color_led(devices[0], dwPage, 0, 1);
 
 
-    TimerSimconnectReader = new QTimer(this); // timer do obslugi kontroli polaczenia
-    connect(TimerSimconnectReader, SIGNAL(timeout()), this, SLOT(readSimmconnectData()));  // sygnal do odczytu simconnect
+    TimerSimconnectReader = new QTimer(this);
+    connect(TimerSimconnectReader, SIGNAL(timeout()), this, SLOT(readSimmconnectData()));
 
-    TimerFlash = new QTimer(this); // timer do obslugi kontroli polaczenia
-    connect(TimerFlash, SIGNAL(timeout()), this, SLOT(x52_flash()));  // sygnal do odczytu simconnect
+    TimerFlash = new QTimer(this);
+    connect(TimerFlash, SIGNAL(timeout()), this, SLOT(x52_flash()));
     TimerFlash->start(80);
 
-    TimerMFDrefresh = new QTimer(this); // timer do obslugi kontroli polaczenia
-    connect(TimerMFDrefresh, SIGNAL(timeout()), this, SLOT(mfdPrintLines()));  // sygnal do odczytu simconnect
+    TimerMFDrefresh = new QTimer(this);
+    connect(TimerMFDrefresh, SIGNAL(timeout()), this, SLOT(mfdPrintLines()));
 
-
-    TimerAutoconnect = new QTimer(this); // timer do automatycznego polaczenia z simconnect
+    TimerAutoconnect = new QTimer(this); // auto connection timer
     connect(TimerAutoconnect, SIGNAL(timeout()), this, SLOT(autoconnect_timer()));
     if(ui->autoconnect_checkBox->isChecked()){
         autocon_time = 10;
@@ -621,7 +612,7 @@ void XMLretrievButtons(Ui::MainWindow *ui_pointer, QString tag, QString arg1)
                         QDomElement e = elm.toElement();
                         qDebug() << "nazwa: " << e.attribute("name") << " funkcja: " << e.attribute("function");
                         jakiPzycisk = e.attribute("name");
-                        diody[dek.at(jakiPzycisk)] = e.attribute("function");
+                        ledsArray[dek.at(jakiPzycisk)] = e.attribute("function");
                         if(e.attribute("name") == "LED_FIRE"){
                             ui_pointer->fire_comboBox->setCurrentIndex(ui_pointer->fire_comboBox->findText(e.attribute("function")));
                         } else if(e.attribute("name") == "LED_FIRE_A"){
@@ -663,7 +654,7 @@ void XMLretrievButtons(Ui::MainWindow *ui_pointer, QString tag, QString arg1)
                             mfdLine[1] = ui_pointer->mfd2_comboBox->currentText();
                         } else if(el.attribute("name") == "2"){
                             ui_pointer->mfd3_comboBox->setCurrentIndex(ui_pointer->mfd3_comboBox->findText(el.attribute("function")));
-                            mfdLine[3] = ui_pointer->mfd3_comboBox->currentText();
+                            mfdLine[2] = ui_pointer->mfd3_comboBox->currentText();
                         }
                     }
                 }
@@ -772,7 +763,7 @@ void XMLremoveProfile(QString name)
                 QDomElement e = elm.toElement();
                 if(e.attribute("name") == name){
                     root.removeChild(e);
-                    qDebug() << "usunieto";
+                    qDebug() << "deleted";
                 }
             }
         }
@@ -846,8 +837,8 @@ void MainWindow::on_save_Button_clicked()
     msgBox.exec();
 }
 
-//======================   OBSLUGA WYSYLANIA/ODBIERANIA SIMCONNECT   ==========================
-void CALLBACK dispatchRoutine(SIMCONNECT_RECV* pData, DWORD cbData, void* pContext) {  // callback dla EVENTOW LVAR
+//======================   SIMCONNECT SEND / RECEIVE OPERATION   ==========================
+void CALLBACK dispatchRoutine(SIMCONNECT_RECV* pData, DWORD cbData, void* pContext) {  // callback for LVAR events
     //WASM_FCU_DataRefs* pDataRefs = NULL;
     DWORD receivedID = pData->dwID;
     switch (receivedID)
@@ -875,9 +866,9 @@ void MainWindow::readSimmconnectData()  // watek obslugi odbioru SIMCONNECT
 
     hr = SimConnect_GetNextDispatch(hSimConnect, &pData, &cbData); //odczytanie zmiennych
     if (SUCCEEDED(hr)){
-        pObjData = (SIMCONNECT_RECV_SIMOBJECT_DATA*)pData;  // zostawic !!! - potrzebne do zapisania danych
+        pObjData = (SIMCONNECT_RECV_SIMOBJECT_DATA*)pData;
         pDataRefs = (SimConnect_DataRefs*)&pObjData->dwData;
-        qDebug() << pDataRefs->batt_master;
+        //qDebug() << pDataRefs->batt_master;
         SetLed(ui);
     }
     SimConnect_CallDispatch(hSimConnectLVAR, dispatchRoutine, NULL);
@@ -927,46 +918,45 @@ void MainWindow::on_Connect_Button_clicked()
 
          //---VARIABLES----------------------------------------------------------------------------------------------------
          hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "FLAPS HANDLE PERCENT", "Percent");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "SPOILERS HANDLE POSITION", "Percent");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "SPOILERS ARMED", "Bool");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AIRSPEED INDICATED", "Knots");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "GEAR POSITION", "Percent");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT MASTER", "Bool");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT HEADING LOCK", "Bool");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT NAV1 LOCK", "Bool");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT ALTITUDE LOCK", "Bool");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT APPROACH HOLD", "Bool");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT NAV SELECTED", "Number");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT HEADING LOCK DIR", "Degree");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT ALTITUDE LOCK VAR", "Feet");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT VERTICAL HOLD VAR", "Feet/minute");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT AIRSPEED HOLD VAR", "Knots");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "NAV OBS:1", "Degrees");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "NAV OBS:2", "Degrees");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "NAV OBS:3", "Degrees");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOTHROTTLE ACTIVE", "Bool");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "Indicated Altitude", "feet");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "VERTICAL SPEED", "feet per minute");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "HEADING INDICATOR", "degrees");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "GENERAL ENG THROTTLE LEVER POSITION:1", "Percent");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "LIGHT LANDING", "Bool");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "BRAKE INDICATOR", "Bool");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "BRAKE PARKING POSITION", "Bool");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "GENERAL ENG RPM:1", "Rpm");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "GENERAL ENG RPM:2", "Rpm");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "ELECTRICAL MAIN BUS VOLTAGE", "Volts");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "IS GEAR RETRACTABLE", "Bool");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "LIGHT TAXI", "Bool");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "LIGHT BEACON", "Bool");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "LIGHT NAV", "Bool");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "LIGHT STROBE", "Bool");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "LIGHT PANEL", "Bool");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "STALL WARNING", "Bool");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "OVERSPEED WARNING", "Bool");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "INNER MARKER", "Bool");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "MIDDLE MARKER", "Bool");
-             hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "OUTER MARKER", "Bool");
-
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "SPOILERS HANDLE POSITION", "Percent");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "SPOILERS ARMED", "Bool");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AIRSPEED INDICATED", "Knots");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "GEAR POSITION", "Percent");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT MASTER", "Bool");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT HEADING LOCK", "Bool");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT NAV1 LOCK", "Bool");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT ALTITUDE LOCK", "Bool");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT APPROACH HOLD", "Bool");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT NAV SELECTED", "Number");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT HEADING LOCK DIR", "Degree");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT ALTITUDE LOCK VAR", "Feet");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT VERTICAL HOLD VAR", "Feet/minute");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT AIRSPEED HOLD VAR", "Knots");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "NAV OBS:1", "Degrees");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "NAV OBS:2", "Degrees");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "NAV OBS:3", "Degrees");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOTHROTTLE ACTIVE", "Bool");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "Indicated Altitude", "feet");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "VERTICAL SPEED", "feet per minute");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "HEADING INDICATOR", "degrees");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "GENERAL ENG THROTTLE LEVER POSITION:1", "Percent");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "LIGHT LANDING", "Bool");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "BRAKE INDICATOR", "Bool");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "BRAKE PARKING POSITION", "Bool");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "GENERAL ENG RPM:1", "Rpm");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "GENERAL ENG RPM:2", "Rpm");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "ELECTRICAL MAIN BUS VOLTAGE", "Volts");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "IS GEAR RETRACTABLE", "Bool");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "LIGHT TAXI", "Bool");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "LIGHT BEACON", "Bool");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "LIGHT NAV", "Bool");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "LIGHT STROBE", "Bool");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "LIGHT PANEL", "Bool");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "STALL WARNING", "Bool");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "OVERSPEED WARNING", "Bool");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "INNER MARKER", "Bool");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "MIDDLE MARKER", "Bool");
+         hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "OUTER MARKER", "Bool");
          hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "ELECTRICAL MAIN BUS VOLTAGE", "Volts");
          hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT FLIGHT DIRECTOR ACTIVE:1", "Bool");
          hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "KOHLSMAN SETTING MB", "Millibars");
@@ -977,40 +967,36 @@ void MainWindow::on_Connect_Button_clicked()
          hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT VERTICAL HOLD VAR", "Feet/minute");
          hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOTHROTTLE ACTIVE", "Bool");
          hr = SimConnect_AddToDataDefinition(hSimConnect, DEFINITION_ID_AP, "AUTOPILOT ALTITUDE LOCK VAR:1", "Feet");
-
-         hr = SimConnect_AddToDataDefinition( hSimConnect, DEFINITION_ID_AP, "TITLE", nullptr, SIMCONNECT_DATATYPE::SIMCONNECT_DATATYPE_STRING256); // nazwa samolotu - zostawic jako ostatni!!!
-
-
+         hr = SimConnect_AddToDataDefinition( hSimConnect, DEFINITION_ID_AP, "TITLE", nullptr, SIMCONNECT_DATATYPE::SIMCONNECT_DATATYPE_STRING256); // airplane name - at last!!!
 
          hr = SimConnect_RequestDataOnSimObject(hSimConnect, REQUEST_AP_SETTINGS, DEFINITION_ID_AP, SIMCONNECT_OBJECT_ID_USER, SIMCONNECT_PERIOD_SIM_FRAME);
-         //---EVENTS ODCZYT-------------------------------------------------------------------------------------------------
+         //--- EVENTS READ -------------------------------------------------------------------------------------------------
          //hr = SimConnect_MapClientEventToSimEvent(hSimConnect, EVENT_BRAKES, "AP_MASTER");
          //hr = SimConnect_AddClientEventToNotificationGroup(hSimConnect, GROUP_B, EVENT_BRAKES);
          //hr = SimConnect_SetNotificationGroupPriority(hSimConnect, GROUP_B, SIMCONNECT_GROUP_PRIORITY_HIGHEST);
          //-----------------------------------------------------------------------------------------------------------------
          hr = SimConnect_SetNotificationGroupPriority(hSimConnect, GROUP_A, SIMCONNECT_GROUP_PRIORITY_STANDARD);
-
-         //-----------  LVAR !!!!!!!!!!!!!! ------------------------------------------------------------------
+         //-----------  LVAR  ----------------------------------------------------------------------------------------------
          hr = SimConnect_Open(&hSimConnectLVAR, "X52 PRO Plugin", nullptr, 0, 0, 0);
-             if (S_OK == hr) {
-                 qDebug() << "Connected LVAR Modul\n";
-                 hr = SimConnect_MapClientDataNameToID(hSimConnectLVAR, "EFIS_CDA", ClientDataID);
-                 hr &= SimConnect_AddToClientDataDefinition(hSimConnectLVAR, DEFINITION_1, SIMCONNECT_CLIENTDATAOFFSET_AUTO, sizeof(WASM_FCU_DataRefs));
-                 hr &= SimConnect_CreateClientData(hSimConnectLVAR, ClientDataID, sizeof(WASM_FCU_DataRefs), SIMCONNECT_CLIENT_DATA_REQUEST_FLAG_CHANGED);
-                 hr &= SimConnect_RequestClientData(hSimConnectLVAR, ClientDataID, REQUEST_1, DEFINITION_1, SIMCONNECT_CLIENT_DATA_PERIOD_VISUAL_FRAME, SIMCONNECT_CLIENT_DATA_REQUEST_FLAG_DEFAULT);
+         if (S_OK == hr) {
+             qDebug() << "Connected LVAR Modul\n";
+             hr = SimConnect_MapClientDataNameToID(hSimConnectLVAR, "EFIS_CDA", ClientDataID);
+             hr &= SimConnect_AddToClientDataDefinition(hSimConnectLVAR, DEFINITION_1, SIMCONNECT_CLIENTDATAOFFSET_AUTO, sizeof(WASM_FCU_DataRefs));
+             hr &= SimConnect_CreateClientData(hSimConnectLVAR, ClientDataID, sizeof(WASM_FCU_DataRefs), SIMCONNECT_CLIENT_DATA_REQUEST_FLAG_CHANGED);
+             hr &= SimConnect_RequestClientData(hSimConnectLVAR, ClientDataID, REQUEST_1, DEFINITION_1, SIMCONNECT_CLIENT_DATA_PERIOD_VISUAL_FRAME, SIMCONNECT_CLIENT_DATA_REQUEST_FLAG_DEFAULT);
 
-                 /*************** REQUEST DATA FROM THE AIRCRAFT ***************/
-                 hr = SimConnect_MapClientEventToSimEvent(hSimConnectLVAR, EVENT_2, "#0x11097");
-                 hr = SimConnect_AddClientEventToNotificationGroup(hSimConnectLVAR, GROUP_A, EVENT_2, true);
+             /*************** REQUEST DATA FROM THE AIRCRAFT ***************/
+             hr = SimConnect_MapClientEventToSimEvent(hSimConnectLVAR, EVENT_2, "#0x11097");
+             hr = SimConnect_AddClientEventToNotificationGroup(hSimConnectLVAR, GROUP_A, EVENT_2, true);
 
-                 hr = SimConnect_MapClientEventToSimEvent(hSimConnectLVAR, EVENT_1, "#0x11099");
-                 hr = SimConnect_AddClientEventToNotificationGroup(hSimConnectLVAR, GROUP_A, EVENT_1, true);
+             hr = SimConnect_MapClientEventToSimEvent(hSimConnectLVAR, EVENT_1, "#0x11099");
+             hr = SimConnect_AddClientEventToNotificationGroup(hSimConnectLVAR, GROUP_A, EVENT_1, true);
 
-                 hr = SimConnect_MapClientEventToSimEvent(hSimConnectLVAR, EVENT_WASM, "LVAR_ACCESS.EFIS");
-                 hr = SimConnect_AddClientEventToNotificationGroup(hSimConnectLVAR, GROUP_A, EVENT_WASM, true);
+             hr = SimConnect_MapClientEventToSimEvent(hSimConnectLVAR, EVENT_WASM, "LVAR_ACCESS.EFIS");
+             hr = SimConnect_AddClientEventToNotificationGroup(hSimConnectLVAR, GROUP_A, EVENT_WASM, true);
 
-                 //hr = SimConnect_SetNotificationGroupPriority(hSimConnectLVAR, GROUP_A, SIMCONNECT_GROUP_PRIORITY_DEFAULT); //usunac jesli wszystko ok
-             }
+             //hr = SimConnect_SetNotificationGroupPriority(hSimConnectLVAR, GROUP_A, SIMCONNECT_GROUP_PRIORITY_DEFAULT); //usunac jesli wszystko ok
+         }
          //---------------------------------------------------------------------------------------------------
          buttons_enable(ui, false);
          ui->Connect_Button->setEnabled(false);
@@ -1018,8 +1004,8 @@ void MainWindow::on_Connect_Button_clicked()
          ui->Connected_CheckBox->setChecked(true);
          ui->statusbar->showMessage("Connected with MSFS", STATUSBAR_TIMEOUT);
          delay(1000);
-         TimerSimconnectReader->start(10); //start timera do odczytu simconnect
-         TimerMFDrefresh->start(MFD_REF_TIME); // watek odswiezania MFD
+         TimerSimconnectReader->start(10); //simconnect read timer start
+         TimerMFDrefresh->start(MFD_REFRESH_TIME); // MFD refresh thread
     } else {
         ui->statusbar->showMessage("Can't connect with MSFS!", STATUSBAR_TIMEOUT);
         buttons_enable(ui, true);
@@ -1029,7 +1015,7 @@ void MainWindow::on_Connect_Button_clicked()
 
 void MainWindow::on_Disconnect_Button_clicked()
 {
-    TimerMFDrefresh->stop(); // watek odswiezania MFD
+    TimerMFDrefresh->stop(); // MFD refresh thread
     TimerSimconnectReader->stop();
     hr = SimConnect_Close(hSimConnect);
 

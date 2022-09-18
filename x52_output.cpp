@@ -1,9 +1,9 @@
+#include <iostream>
 #include "x52_output.h"
 #include "DirectOutput.h"
 #include "leds.h"
-#include <iostream>
 
-//-----------FUNKCJE------------------------------
+
 void x52_output::init(void* hDevice, DWORD dwPage){
     const wchar_t * pageDebugName = L"X52_page";
     DirectOutput_AddPage(hDevice, dwPage, pageDebugName, FLAG_SET_AS_ACTIVE);
