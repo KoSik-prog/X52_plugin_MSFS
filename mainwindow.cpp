@@ -13,16 +13,13 @@
 #include <QGridLayout>
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
-
 #include "x52_output.h"
 #include "structures_simconnect.h"
+#include "settings.h"
 
 extern "C" {
     #include "SimConnect.h"
 }
-
-
-#include "DirectOutput.h"
 
 QStringList LEDS_FUNCTIONS = {
     "RED",
@@ -78,13 +75,18 @@ QStringList MFD_FUNCTIONS = {
 #define STATUSBAR_TIMEOUT 3000 // x 1000 = seconds
 
 uint8_t autocon_time = 0;
+// ------------ SETTINGS ------------------------------------------------------------
+settings xmlSettings;
+QStringList profilesArray = {};
+QStringList buttonsArray = {};
+QStringList mfdArray = {"AP_CRS1", "AP_HDG", "AP_V/S"};
+QStringList settingsArray = {};
 // ------------ DATA FOR X52 --------------------------------------------------------
 extern std::vector<void*> devices;
 x52_output x52output;
 DWORD dwPage = 1;
-QVector<QString> mfdLine {"AP_CRS1", "AP_HDG", "AP_VS"};
 QVector<QString> ledsArray {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""};
-std::map<QString, int> dek {{"LED_FIRE", 0}, {"LED_FIRE_A", 1}, {"LED_FIRE_B", 3}, {"LED_FIRE_D", 5}, {"LED_FIRE_E", 7}, {"LED_TOGGLE_1_2", 9}, {"LED_TOGGLE_3_4", 11}, {"LED_TOGGLE_5_6", 13}, {"LED_POV_2", 15}, {"LED_CLUTCH", 17}, {"LED_THROTTLE", 19}};
+std::map<QString, int> buttonDecodeArray {{"LED_FIRE", 0}, {"LED_FIRE_A", 1}, {"LED_FIRE_B", 3}, {"LED_FIRE_D", 5}, {"LED_FIRE_E", 7}, {"LED_TOGGLE_1_2", 9}, {"LED_TOGGLE_3_4", 11}, {"LED_TOGGLE_5_6", 13}, {"LED_POV_2", 15}, {"LED_CLUTCH", 17}, {"LED_THROTTLE", 19}};
 // ----------- DATA FOR SIMCONNECT --------------------------------------------------
 HANDLE hSimConnect = NULL;
 HANDLE hSimConnectLVAR = NULL;
@@ -97,11 +99,11 @@ SIMCONNECT_RECV* pData = NULL;
 DWORD cbData = 0;
 SIMCONNECT_RECV_SIMOBJECT_DATA* pObjData = NULL;
 //--------- FUNCTIONS DECLARATIONS ----------------------------------------------------------
-void XMLretrievPlanes(Ui::MainWindow *ui_pointer, QString tag, QString att);
+void XMLretrievProfiles(Ui::MainWindow *ui_pointer);
 void XMLretrievButtons(Ui::MainWindow *ui_pointer, QString tag, QString arg1);
 void XMLsetAttribute(QDomDocument doc, QDomElement btns, QString name, QString func, uint8_t rodzaj);
 void SetLed(Ui::MainWindow *ui_pointer);
-//----------------------------------------------------------------------------------------------------------------------------
+//---------------------- FUNCTIONS DEFINITIONS ------------------------------------------------------------------------------------------------------
 void MainWindow::SetLed(Ui::MainWindow *ui_pointer){
     SimConnect_DataRefs* SimConnect_Data = NULL;
     SimConnect_Data = (SimConnect_DataRefs*)&pObjData->dwData;
@@ -320,25 +322,25 @@ void MainWindow::mfdPrintLines(){
     //pDataRefs_WASM_FCU = (WASM_FCU_DataRefs*)&pObjData->dwData;
 
     for(uint8_t i=0; i<3; i++){
-        if(mfdLine[i] == "SPD"){
+        if(mfdArray.at(i) == "SPD"){
             swprintf_s(txt, L"SPD: %.0f kts", SimConnect_Data->spd);
-        } else if(mfdLine[i] == "ALT"){
+        } else if(mfdArray.at(i) == "ALT"){
             swprintf_s(txt, L"ALT: %.0f ft", SimConnect_Data->altitude);
-        } else if(mfdLine[i] == "V/S"){
+        } else if(mfdArray.at(i) == "V/S"){
             swprintf_s(txt, L"V/S: %.0ff/m", SimConnect_Data->verticalspeed);
-        } else if(mfdLine[i] == "HDG"){
+        } else if(mfdArray.at(i) == "HDG"){
             swprintf_s(txt, L"HDG: %.0f", SimConnect_Data->hdg);
-        }  else if(mfdLine[i] == "AP_HDG"){
+        }  else if(mfdArray.at(i) == "AP_HDG"){
             swprintf_s(txt, L"ApHDG: %.0f", SimConnect_Data->ap_hdg);
-        } else if(mfdLine[i] == "AP_ALT"){
+        } else if(mfdArray.at(i) == "AP_ALT"){
             swprintf_s(txt, L"ApALT: %.0fft", SimConnect_Data->ap_alt);
-        } else if(mfdLine[i] == "AP_V/S"){
+        } else if(mfdArray.at(i) == "AP_V/S"){
             swprintf_s(txt, L"ApV/S: %.0ff/m", SimConnect_Data->ap_vs);
-        } else if(mfdLine[i] == "AP_SPD"){
+        } else if(mfdArray.at(i) == "AP_SPD"){
             swprintf_s(txt, L"ApSPD: %.0f kts", SimConnect_Data->ap_spd);
-        } else if(mfdLine[i] == "AP_CRS1"){
+        } else if(mfdArray.at(i) == "AP_CRS1"){
             swprintf_s(txt, L"ApCRS1: %.0f", SimConnect_Data->ap_crs1);
-        } else if(mfdLine[i] == "AP_CRS2"){
+        } else if(mfdArray.at(i) == "AP_CRS2"){
             swprintf_s(txt, L"ApCRS2: %.0f", SimConnect_Data->ap_crs2);
         } else {
             swprintf_s(txt, L"");
@@ -370,8 +372,6 @@ void buttons_enable(Ui::MainWindow *ui_pointer, bool stan)
     ui_pointer->removeProfil_Button->setEnabled(stan);
     ui_pointer->save_Button->setEnabled(stan);
 }
-
-//============================================================================================================================
 void MainWindow::delay( int millisecondsToWait )
 {
     QTime dieTime = QTime::currentTime().addMSecs( millisecondsToWait );
@@ -380,6 +380,82 @@ void MainWindow::delay( int millisecondsToWait )
         QCoreApplication::processEvents( QEventLoop::AllEvents, 100 );
     }
 }
+
+//---------- SETTINGS ------------------------------------------------
+void XMLretrievProfiles(Ui::MainWindow *ui_pointer){
+    xmlSettings.get_planes("plane", "name");
+    bool oldState = ui_pointer->profil_comboBox->blockSignals(true);
+    ui_pointer->profil_comboBox->clear();
+    ui_pointer->profil_comboBox->blockSignals(oldState);
+    for(int i=0; i<profilesArray.size(); i++){
+        ui_pointer->profil_comboBox->addItem(profilesArray.at(i));
+    }
+}
+
+void XMLretrievButtons(Ui::MainWindow *ui_pointer, QString tag, QString name){
+    xmlSettings.get_functions("plane", name);
+    ui_pointer->fire_comboBox->setCurrentIndex(ui_pointer->fire_comboBox->findText(buttonsArray.at(0)));
+    ui_pointer->fireA_comboBox->setCurrentIndex(ui_pointer->fireA_comboBox->findText(buttonsArray.at(1)));
+    ui_pointer->fireB_comboBox->setCurrentIndex(ui_pointer->fireB_comboBox->findText(buttonsArray.at(2)));
+    ui_pointer->fireD_comboBox->setCurrentIndex(ui_pointer->fireD_comboBox->findText(buttonsArray.at(3)));
+    ui_pointer->fireE_comboBox->setCurrentIndex(ui_pointer->fireE_comboBox->findText(buttonsArray.at(4)));
+    ui_pointer->toggle12_comboBox->setCurrentIndex(ui_pointer->toggle12_comboBox->findText(buttonsArray.at(5)));
+    ui_pointer->toggle34_comboBox->setCurrentIndex(ui_pointer->toggle34_comboBox->findText(buttonsArray.at(6)));
+    ui_pointer->toggle56_comboBox->setCurrentIndex(ui_pointer->toggle56_comboBox->findText(buttonsArray.at(7)));
+    ui_pointer->pov2_comboBox->setCurrentIndex(ui_pointer->pov2_comboBox->findText(buttonsArray.at(8)));
+    ui_pointer->clutch_comboBox->setCurrentIndex(ui_pointer->clutch_comboBox->findText(buttonsArray.at(9)));
+    ui_pointer->throttle_comboBox->setCurrentIndex(ui_pointer->throttle_comboBox->findText(buttonsArray.at(10)));
+
+    ui_pointer->mfd1_comboBox->setCurrentIndex(ui_pointer->mfd1_comboBox->findText(mfdArray.at(0)));
+    ui_pointer->mfd2_comboBox->setCurrentIndex(ui_pointer->mfd2_comboBox->findText(mfdArray.at(1)));
+    ui_pointer->mfd3_comboBox->setCurrentIndex(ui_pointer->mfd3_comboBox->findText(mfdArray.at(2)));
+}
+
+void XMLcreateNewProfile(QString name){
+    settingsArray.clear();
+    settingsArray.append(buttonsArray);
+    settingsArray.append(mfdArray);
+    xmlSettings.create_newProfile(name, settingsArray);
+}
+//======================   SIMCONNECT SEND / RECEIVE OPERATION   ==========================
+void CALLBACK dispatchRoutine(SIMCONNECT_RECV* pData, DWORD cbData, void* pContext) {  // callback for LVAR events
+    //WASM_FCU_DataRefs* pDataRefs = NULL;
+    DWORD receivedID = pData->dwID;
+    switch (receivedID)
+    {
+    case SIMCONNECT_RECV_ID_OPEN: {
+
+        break;
+    }
+    case SIMCONNECT_RECV_ID_CLIENT_DATA: {
+        //SIMCONNECT_RECV_CLIENT_DATA* pObjData = (SIMCONNECT_RECV_CLIENT_DATA*)pData;
+        //pDataRefs = (WASM_FCU_DataRefs*)&pObjData->dwData;
+        //qDebug() << "Received client data: " << QString::number(pDataRefs->fcu_alt_managed, 'f', 2);
+        pDataLVAR = pData;
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+
+void MainWindow::readSimmconnectData()  // watek obslugi odbioru SIMCONNECT
+{
+    SimConnect_DataRefs* pDataRefs = NULL;
+
+    hr = SimConnect_GetNextDispatch(hSimConnect, &pData, &cbData); //odczytanie zmiennych
+    if (SUCCEEDED(hr)){
+        pObjData = (SIMCONNECT_RECV_SIMOBJECT_DATA*)pData;
+        pDataRefs = (SimConnect_DataRefs*)&pObjData->dwData;
+        //qDebug() << pDataRefs->batt_master;
+        SetLed(ui);
+    }
+    SimConnect_CallDispatch(hSimConnectLVAR, dispatchRoutine, NULL);
+    SimConnect_TransmitClientEvent(hSimConnectLVAR, objectID, EVENT_WASM, 0, SIMCONNECT_GROUP_PRIORITY_HIGHEST, SIMCONNECT_EVENT_FLAG_GROUPID_IS_PRIORITY);
+}
+
+//===================== MAIN ============================================================
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -391,7 +467,9 @@ MainWindow::MainWindow(QWidget *parent)
     ui->image_label->setScaledContents(false);
     ui->image_label->setGeometry(30, 100, pm.width(), pm.height());
     //---- read XML -----------------------------------------
-    XMLretrievPlanes(ui, "plane", "name");
+    //XMLretrievPlanes(ui, "plane", "name");
+    //xmlSettings.XMLretrievPlanes("plane", "name");
+    XMLretrievProfiles(ui);
     //---- load LED functions ---------------------------------
     ui->fire_comboBox->addItems(LEDS_FUNCTIONS);
     ui->fire_comboBox->model()->sort(0, Qt::AscendingOrder);
@@ -471,249 +549,14 @@ void MainWindow::autoconnect_timer()
     }
 }
 
-void XMLretrievPlanes(Ui::MainWindow *ui_pointer, QString tag, QString att)
-{
-    QDomDocument document;
-    QFile file("settings.xml");
-        if(!file.open(QIODevice::ReadOnly | QIODevice::Text))
-        {
-            qDebug() << "Failed to open the file for reading.";
-        }
-        else
-        {
-            if(!document.setContent(&file))
-            {
-                qDebug() << "Failed to load the file for reading.";
-            }
-            file.close();
-        }
-        ui_pointer->profil_comboBox->clear();
-
-    QDomElement root = document.firstChildElement();
-    QDomNodeList nodes = root.elementsByTagName(tag);
-
-    qDebug() << "PLANES = " << nodes.count();
-    for(int i = 0; i < nodes.count(); i++)
-    {
-        QDomNode elm = nodes.at(i);
-        if(elm.isElement())
-        {
-            QDomElement e = elm.toElement();
-            ui_pointer->profil_comboBox->addItem(e.attribute(att));
-        }
-    }
-    ui_pointer->profil_comboBox->model()->sort(0, Qt::AscendingOrder); // posortowanie listy profili
-}
 
 
-void XMLretrievButtons(Ui::MainWindow *ui_pointer, QString tag, QString arg1)
-{
-    QDomDocument document;
-    QFile file("settings.xml");
-    if(!file.open(QIODevice::ReadOnly | QIODevice::Text))
-    {
-        qDebug() << "Failed to open the file for reading.";
-    }
-    else
-    {
-        if(!document.setContent(&file))
-        {
-            qDebug() << "Failed to load the file for reading.";
-        }
-        file.close();
-    }
-    QDomElement root = document.firstChildElement();
-    QDomNodeList plane = root.elementsByTagName(tag);
-
-    for(int i = 0; i < plane.count(); i++)
-    {
-        QDomNode planenode = plane.at(i);
-        if(planenode.isElement())
-        {
-            QDomElement planeelement = planenode.toElement();
-            if(planeelement.attribute("name") == arg1){
-                QDomNodeList nodes = planeelement.elementsByTagName("btn");
-                QString jakiPzycisk;
-                for(int i = 0; i < nodes.count(); i++)
-                {
-                    QDomNode elm = nodes.at(i);
-                    if(elm.isElement())
-                    {
-                        QDomElement e = elm.toElement();
-                        qDebug() << "nazwa: " << e.attribute("name") << " funkcja: " << e.attribute("function");
-                        jakiPzycisk = e.attribute("name");
-                        ledsArray[dek.at(jakiPzycisk)] = e.attribute("function");
-                        if(e.attribute("name") == "LED_FIRE"){
-                            ui_pointer->fire_comboBox->setCurrentIndex(ui_pointer->fire_comboBox->findText(e.attribute("function")));
-                        } else if(e.attribute("name") == "LED_FIRE_A"){
-                            ui_pointer->fireA_comboBox->setCurrentIndex(ui_pointer->fireA_comboBox->findText(e.attribute("function")));
-                        } else if(e.attribute("name") == "LED_FIRE_B"){
-                            ui_pointer->fireB_comboBox->setCurrentIndex(ui_pointer->fireB_comboBox->findText(e.attribute("function")));
-                        } else if(e.attribute("name") == "LED_FIRE_D"){
-                            ui_pointer->fireD_comboBox->setCurrentIndex(ui_pointer->fireD_comboBox->findText(e.attribute("function")));
-                        } else if(e.attribute("name") == "LED_FIRE_E"){
-                            ui_pointer->fireE_comboBox->setCurrentIndex(ui_pointer->fireE_comboBox->findText(e.attribute("function")));
-                        } else if(e.attribute("name") == "LED_TOGGLE_1_2"){
-                            ui_pointer->toggle12_comboBox->setCurrentIndex(ui_pointer->toggle12_comboBox->findText(e.attribute("function")));
-                        } else if(e.attribute("name") == "LED_TOGGLE_3_4"){
-                            ui_pointer->toggle34_comboBox->setCurrentIndex(ui_pointer->toggle34_comboBox->findText(e.attribute("function")));
-                        } else if(e.attribute("name") == "LED_TOGGLE_5_6"){
-                            ui_pointer->toggle56_comboBox->setCurrentIndex(ui_pointer->toggle56_comboBox->findText(e.attribute("function")));
-                        } else if(e.attribute("name") == "LED_POV_2"){
-                            ui_pointer->pov2_comboBox->setCurrentIndex(ui_pointer->pov2_comboBox->findText(e.attribute("function")));
-                        } else if(e.attribute("name") == "LED_CLUTCH"){
-                            ui_pointer->clutch_comboBox->setCurrentIndex(ui_pointer->clutch_comboBox->findText(e.attribute("function")));
-                        } else if(e.attribute("name") == "LED_THROTTLE"){
-                            ui_pointer->throttle_comboBox->setCurrentIndex(ui_pointer->throttle_comboBox->findText(e.attribute("function")));
-                        }
-                    }
-                }
-                QDomNodeList nodesMFD = planeelement.elementsByTagName("mfd");
-                for(int i = 0; i < nodesMFD.count(); i++)
-                {
-                    QDomNode elemm = nodesMFD.at(i);
-                    if(elemm.isElement())
-                    {
-                        QDomElement el = elemm.toElement();
-                        qDebug() << "MFD nazwa: " << el.attribute("name") << " funkcja: " << el.attribute("function");
-                        if(el.attribute("name") == "0"){
-                            ui_pointer->mfd1_comboBox->setCurrentIndex(ui_pointer->mfd1_comboBox->findText(el.attribute("function")));
-                            mfdLine[0] = ui_pointer->mfd1_comboBox->currentText();
-                        } else if(el.attribute("name") == "1"){
-                            ui_pointer->mfd2_comboBox->setCurrentIndex(ui_pointer->mfd2_comboBox->findText(el.attribute("function")));
-                            mfdLine[1] = ui_pointer->mfd2_comboBox->currentText();
-                        } else if(el.attribute("name") == "2"){
-                            ui_pointer->mfd3_comboBox->setCurrentIndex(ui_pointer->mfd3_comboBox->findText(el.attribute("function")));
-                            mfdLine[2] = ui_pointer->mfd3_comboBox->currentText();
-                        }
-                    }
-                }
-
-            }
-        }
-    }
-}
-
-void XMLcreateNewProfile(Ui::MainWindow *ui_pointer, QString name)
-{
-    QDomDocument doc;
-    QFile file("settings.xml");
-    if(!file.open(QIODevice::ReadOnly | QIODevice::Text))
-    {
-        qDebug() << "Failed to open the file for reading.";
-    }
-    else
-    {
-        if(!doc.setContent(&file))
-        {
-            qDebug() << "Failed to load the file for reading.";
-        }
-        file.close();
-    }
-    QDomElement root = doc.firstChildElement();
-
-    QDomElement btns = doc.createElement("plane");
-    btns.setAttribute("name",name);
-    root.appendChild(btns);
-    //------------------------------------------------------------------
-    XMLsetAttribute(doc, btns, "LED_FIRE", ui_pointer->fire_comboBox->currentText(), 0);
-    XMLsetAttribute(doc, btns, "LED_FIRE_A", ui_pointer->fireA_comboBox->currentText(), 0);
-    XMLsetAttribute(doc, btns, "LED_FIRE_B", ui_pointer->fireB_comboBox->currentText(), 0);
-    XMLsetAttribute(doc, btns, "LED_FIRE_D", ui_pointer->fireD_comboBox->currentText(), 0);
-    XMLsetAttribute(doc, btns, "LED_FIRE_E", ui_pointer->fireE_comboBox->currentText(), 0);
-    XMLsetAttribute(doc, btns, "LED_TOGGLE_1_2", ui_pointer->toggle12_comboBox->currentText(), 0);
-    XMLsetAttribute(doc, btns, "LED_TOGGLE_3_4", ui_pointer->toggle34_comboBox->currentText(), 0);
-    XMLsetAttribute(doc, btns, "LED_TOGGLE_5_6", ui_pointer->toggle56_comboBox->currentText(), 0);
-    XMLsetAttribute(doc, btns, "LED_POV_2", ui_pointer->pov2_comboBox->currentText(), 0);
-    XMLsetAttribute(doc, btns, "LED_CLUTCH", ui_pointer->clutch_comboBox->currentText(), 0);
-    XMLsetAttribute(doc, btns, "LED_THROTTLE", ui_pointer->throttle_comboBox->currentText(), 0);
-    XMLsetAttribute(doc, btns, "0", ui_pointer->mfd1_comboBox->currentText(), 1);
-    XMLsetAttribute(doc, btns, "1", ui_pointer->mfd2_comboBox->currentText(), 1);
-    XMLsetAttribute(doc, btns, "2", ui_pointer->mfd3_comboBox->currentText(), 1);
-    //------------------------------------------------------------------
-
-    QFile file2("settings.xml");
-    if(file2.open(QFile::WriteOnly | QFile::Text)){
-        QTextStream in(&file2);
-        in<<doc.toString();
-        file2.flush();
-        file2.close();
-        qDebug()<<"finished.";
-    }
-    else qDebug()<<"file open failed.";
-}
-
-
-/*
- * btns = plik
- * name = nazwa led
- * func = funkcja jaka ten led bedzie pelnil
- * rodzaj = 0 dla LED, 1 dla MFD
-*/
-void XMLsetAttribute(QDomDocument doc, QDomElement btns, QString name, QString func, uint8_t rodzaj){
-    QDomElement btn;
-    if(rodzaj == 0){
-        btn = doc.createElement("btn");
-    } else {
-        btn = doc.createElement("mfd");
-    }
-
-    btn.setAttribute("name", name);
-    btn.setAttribute("function", func);
-
-    btns.appendChild(btn);
-}
-
-void XMLremoveProfile(QString name)
-{
-    QDomDocument doc;
-    QFile file("settings.xml");
-        if(!file.open(QIODevice::ReadOnly | QIODevice::Text))
-        {
-            qDebug() << "Failed to open the file for reading.";
-        }
-        else
-        {
-            if(!doc.setContent(&file))
-            {
-                qDebug() << "Failed to load the file for reading.";
-            }
-            file.close();
-        }
-        QDomElement root = doc.firstChildElement();
-
-        QDomNodeList nodes = root.elementsByTagName("plane");
-
-        qDebug() << "samoloty = " << nodes.count();
-        for(int i = 0; i < nodes.count(); i++)
-        {
-            QDomNode elm = nodes.at(i);
-            if(elm.isElement())
-            {
-                QDomElement e = elm.toElement();
-                if(e.attribute("name") == name){
-                    root.removeChild(e);
-                    qDebug() << "deleted";
-                }
-            }
-        }
-
-        if(file.open(QFile::WriteOnly | QFile::Text)){
-            QTextStream in(&file);
-            in<<doc.toString();
-            file.flush();
-            file.close();
-        } else qDebug()<<"file open failed.";
-}
-
-void MainWindow::on_profil_comboBox_currentIndexChanged(const QString &arg1)
-{
+void MainWindow::on_profil_comboBox_currentIndexChanged(const QString &arg1){
     XMLretrievButtons(ui, "plane", arg1);
 }
 
 
-void MainWindow::on_addProfile_pushButton_clicked()
-{
+void MainWindow::on_addProfile_pushButton_clicked(){
     bool ok;
         QString text = QInputDialog::getText(this,
                                              tr("X51 Plugin"),
@@ -722,11 +565,11 @@ void MainWindow::on_addProfile_pushButton_clicked()
                                              QDir::home().dirName(),
                                              &ok);
         if (ok && !text.isEmpty()){
-            qDebug() << text;
-            XMLcreateNewProfile(ui, text);
+            qDebug() << "new profile: " << text;
+            XMLcreateNewProfile(text);
 
         }
-        XMLretrievPlanes(ui, "plane", "name");
+        XMLretrievProfiles(ui);
 }
 
 void MainWindow::on_removeProfil_Button_clicked()
@@ -741,15 +584,15 @@ void MainWindow::on_removeProfil_Button_clicked()
         msgBox.exec();
 
         if (msgBox.clickedButton() == okButton) {
-            XMLremoveProfile(ui->profil_comboBox->currentText());
-            XMLretrievPlanes(ui, "plane", "name");
+            xmlSettings.remove_profile(ui->profil_comboBox->currentText());
+            XMLretrievProfiles(ui);
         } else if (msgBox.clickedButton() == cancelButton) {
             // abort
         }
     } else {
         QMessageBox msgBox;
         msgBox.setWindowTitle("X52 plugin");
-        msgBox.setText("        You cannot delete the default profile!              ");
+        msgBox.setText("        You can't delete the default profile!              ");
         msgBox.exec();
     }
 }
@@ -759,50 +602,12 @@ void MainWindow::on_save_Button_clicked()
 {
     QString nazwaProfilu;
     nazwaProfilu = ui->profil_comboBox->currentText();
-    XMLremoveProfile(nazwaProfilu);
-    XMLcreateNewProfile(ui, nazwaProfilu);
+    xmlSettings.remove_profile(nazwaProfilu);
+    XMLcreateNewProfile(nazwaProfilu);
     QMessageBox msgBox;
     msgBox.setWindowTitle("X52 plugin");
     msgBox.setText("        Settings are saved             ");
     msgBox.exec();
-}
-
-//======================   SIMCONNECT SEND / RECEIVE OPERATION   ==========================
-void CALLBACK dispatchRoutine(SIMCONNECT_RECV* pData, DWORD cbData, void* pContext) {  // callback for LVAR events
-    //WASM_FCU_DataRefs* pDataRefs = NULL;
-    DWORD receivedID = pData->dwID;
-    switch (receivedID)
-    {
-    case SIMCONNECT_RECV_ID_OPEN: {
-
-        break;
-    }
-    case SIMCONNECT_RECV_ID_CLIENT_DATA: {
-        //SIMCONNECT_RECV_CLIENT_DATA* pObjData = (SIMCONNECT_RECV_CLIENT_DATA*)pData;
-        //pDataRefs = (WASM_FCU_DataRefs*)&pObjData->dwData;
-        //qDebug() << "Received client data: " << QString::number(pDataRefs->fcu_alt_managed, 'f', 2);
-        pDataLVAR = pData;
-        break;
-    }
-    default:
-        break;
-    }
-}
-
-
-void MainWindow::readSimmconnectData()  // watek obslugi odbioru SIMCONNECT
-{
-    SimConnect_DataRefs* pDataRefs = NULL;
-
-    hr = SimConnect_GetNextDispatch(hSimConnect, &pData, &cbData); //odczytanie zmiennych
-    if (SUCCEEDED(hr)){
-        pObjData = (SIMCONNECT_RECV_SIMOBJECT_DATA*)pData;
-        pDataRefs = (SimConnect_DataRefs*)&pObjData->dwData;
-        //qDebug() << pDataRefs->batt_master;
-        SetLed(ui);
-    }
-    SimConnect_CallDispatch(hSimConnectLVAR, dispatchRoutine, NULL);
-    SimConnect_TransmitClientEvent(hSimConnectLVAR, objectID, EVENT_WASM, 0, SIMCONNECT_GROUP_PRIORITY_HIGHEST, SIMCONNECT_EVENT_FLAG_GROUPID_IS_PRIORITY);
 }
 
 void MainWindow::on_Connect_Button_clicked()

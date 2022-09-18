@@ -12,6 +12,7 @@ CONFIG += c++11
 SOURCES += \
     main.cpp \
     mainwindow.cpp \
+    settings.cpp \
     structures_simconnect.cpp \
     x52_output.cpp
 
@@ -19,6 +20,7 @@ HEADERS += \
     DirectOutput.h \
     leds.h \
     mainwindow.h \
+    settings.h \
     structures_simconnect.h \
     x52_output.h
 
