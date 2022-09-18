@@ -31,8 +31,6 @@ private slots:
 
     void on_Disconnect_Button_clicked();
 
-    void x52_flash();
-
     void SetLed(Ui::MainWindow *ui_pointer);
 
     void mfdPrintLines();

@@ -1,5 +1,3 @@
-#include "mainwindow.h"
-#include "ui_mainwindow.h"
 #include <QDebug>
 #include <QList>
 #include <QDateTime>
@@ -13,15 +11,18 @@
 #include <QMessageBox>
 #include <QSpacerItem>
 #include <QGridLayout>
+#include "mainwindow.h"
+#include "ui_mainwindow.h"
 
 #include "x52_output.h"
-#include "DirectOutput.h"
 #include "structures_simconnect.h"
 
 extern "C" {
     #include "SimConnect.h"
 }
 
+
+#include "DirectOutput.h"
 
 QStringList LEDS_FUNCTIONS = {
     "RED",
@@ -77,17 +78,10 @@ QStringList MFD_FUNCTIONS = {
 #define STATUSBAR_TIMEOUT 3000 // x 1000 = seconds
 
 uint8_t autocon_time = 0;
-uint8_t flash_step = 0;
-QVector<QStringList> flash_intervall{{"0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0"},  //flash intervals
-                                     {"1", "0", "1", "0", "1", "0", "1", "0", "1", "0", "1", "0"},
-                                     {"1", "1", "0", "0", "1", "1", "0", "0", "1", "1", "0", "0"},
-                                     {"1", "1", "1", "1", "1", "1", "1", "1", "0", "0", "0", "0"},};
-QVector<int8_t> LEDflash {0,0,0,0,0,0,0,0,0,0,0}; //flashFlag + flash interval number
-QVector<int8_t> LEDflashColour {0,0,0,0,0,0,0,0,0,0,0}; //flash color
 // ------------ DATA FOR X52 --------------------------------------------------------
+extern std::vector<void*> devices;
 x52_output x52output;
 DWORD dwPage = 1;
-std::vector<void*> devices;
 QVector<QString> mfdLine {"AP_CRS1", "AP_HDG", "AP_VS"};
 QVector<QString> ledsArray {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""};
 std::map<QString, int> dek {{"LED_FIRE", 0}, {"LED_FIRE_A", 1}, {"LED_FIRE_B", 3}, {"LED_FIRE_D", 5}, {"LED_FIRE_E", 7}, {"LED_TOGGLE_1_2", 9}, {"LED_TOGGLE_3_4", 11}, {"LED_TOGGLE_5_6", 13}, {"LED_POV_2", 15}, {"LED_CLUTCH", 17}, {"LED_THROTTLE", 19}};
@@ -102,73 +96,12 @@ HRESULT hr;
 SIMCONNECT_RECV* pData = NULL;
 DWORD cbData = 0;
 SIMCONNECT_RECV_SIMOBJECT_DATA* pObjData = NULL;
-//--------- FUNCTIONES DECLARATIONS ----------------------------------------------------------
+//--------- FUNCTIONS DECLARATIONS ----------------------------------------------------------
 void XMLretrievPlanes(Ui::MainWindow *ui_pointer, QString tag, QString att);
 void XMLretrievButtons(Ui::MainWindow *ui_pointer, QString tag, QString arg1);
 void XMLsetAttribute(QDomDocument doc, QDomElement btns, QString name, QString func, uint8_t rodzaj);
 void SetLed(Ui::MainWindow *ui_pointer);
-//---------------------------------------------------------
-void __stdcall DirectOutput_Device_Callback(void* hDevice, bool bAdded, void* pvContext) {
-    if (bAdded) {
-        devices.push_back(hDevice);
-        qDebug() << "DeviceCallback: " << pvContext;
-    }
-    else {
-        qDebug() << "DeviceCallback: " << pvContext;
-    }
-}
-
-void __stdcall DirectOutput_Enumerate_Callback(void* hDevice, void* pvContext) {
-    devices.push_back(hDevice);
-    qDebug() << "Enumerate: " << pvContext;
-}
-
-/*void __stdcall DirectOutput_SoftButton_Callback(void* hDevice, DWORD dwButtons, void* pvContext){  //przyciski joysticka - NIE DZIALA
-    if (dwButtons == SoftButton_Up) {
-        qDebug() << "ble1";
-    }
-    else if (dwButtons == SoftButton_Down) {
-        qDebug() << "ble2";
-    }
-    else if (dwButtons == SoftButton_Select) {
-        qDebug() << "ble1";
-    }
-}*/
 //----------------------------------------------------------------------------------------------------------------------------
-void MainWindow::x52_flash(void)
-{
-for(uint8_t i=0; i<LEDflash.capacity(); i++)
-    {
-        if(LEDflash.at(i) > 0) //jesli flaga 1 do blysku
-        {
-            if(flash_intervall[LEDflash[i]].at(flash_step) == "1"){
-                x52output.color_led_flash(devices[0], dwPage, i, LEDflashColour.at(i));
-            } else {
-                 x52output.color_led_flash(devices[0], dwPage, i, 0);
-            }
-        }
-    }
-flash_step++;
-if(flash_step > 11)
-    {
-    flash_step = 0;
-    }
-}
-
-void x52Flash(uint8_t nr, uint8_t intervall, uint8_t colour){
-    if(nr == 0 || nr == 19){ //dla przycisków jednokolorowych
-        if(colour != 0){
-            LEDflashColour[nr] = 1;
-        } else {
-            LEDflashColour[nr] = 0;
-        }
-    } else {
-        LEDflashColour[nr] = colour;
-    }
-    LEDflash[nr] = intervall;
-}
-
-
 void MainWindow::SetLed(Ui::MainWindow *ui_pointer){
     SimConnect_DataRefs* SimConnect_Data = NULL;
     SimConnect_Data = (SimConnect_DataRefs*)&pObjData->dwData;
@@ -227,19 +160,19 @@ void MainWindow::SetLed(Ui::MainWindow *ui_pointer){
                 x52output.color_led(devices[0], dwPage, i,SimConnect_Data->parkingbrake); //PARKING BRAKE
             }else if (ledsArray[i] == "PARK_BRK_COMBO"){
                 if(SimConnect_Data->parkingbrake != 0){
-                    x52Flash(i, 3, 1);
+                    x52output.x52Flash(i, 3, 1);
                 } else {
-                    x52Flash(i, 0, 0);
+                    x52output.x52Flash(i, 0, 0);
                     x52output.color_led_flash(devices[0], dwPage, i, 0);
                 }
             } else if (ledsArray[i] == "BRAKES_COMBO"){
                 if(SimConnect_Data->brake != 0 && SimConnect_Data->parkingbrake ==0){
                     x52output.color_led(devices[0], dwPage, i, 1);
-                    x52Flash(i, 0, 0);
+                    x52output.x52Flash(i, 0, 0);
                 } else if(SimConnect_Data->parkingbrake !=0){
-                    x52Flash(i, 3, 1);
+                    x52output.x52Flash(i, 3, 1);
                 } else {
-                    x52Flash(i, 0, 0);
+                    x52output.x52Flash(i, 0, 0);
                     x52output.color_led_flash(devices[0], dwPage, i, 0);
                 }
             }  else if (ledsArray[i] == "RPM_ENGINE_1"){
@@ -294,48 +227,48 @@ void MainWindow::SetLed(Ui::MainWindow *ui_pointer){
                 }
             } else if (ledsArray[i] == "STALL_WARNING"){
                 if(SimConnect_Data->stall_wrn == 1){
-                    x52Flash(i, 1, 1);
+                    x52output.x52Flash(i, 1, 1);
                 } else {
-                    x52Flash(i, 0, 0);
+                    x52output.x52Flash(i, 0, 0);
                     x52output.color_led(devices[0], dwPage, i,-1);
                 }
             } else if (ledsArray[i] == "OVERSPEED_WARNING"){
                 if(SimConnect_Data->overspeed_wrn == 1){
-                    x52Flash(i, 1, 1);
+                    x52output.x52Flash(i, 1, 1);
                 } else {
-                    x52Flash(i, 0, 0);
+                    x52output.x52Flash(i, 0, 0);
                     x52output.color_led(devices[0], dwPage, i,-1);
                 }
             } else if (ledsArray[i] == "MARKERS"){
                 if(SimConnect_Data->inner_marker == 1){
-                    x52Flash(i, 1, 1);
+                    x52output.x52Flash(i, 1, 1);
                 } else if(SimConnect_Data->middle_marker == 1){
-                    x52Flash(i, 1, 3);
+                    x52output.x52Flash(i, 1, 3);
                 } else if(SimConnect_Data->outer_marker == 1){
-                    x52Flash(i, 1, 2);
+                    x52output.x52Flash(i, 1, 2);
                 } else {
-                    x52Flash(i, 0, 0);
+                    x52output.x52Flash(i, 0, 0);
                     x52output.color_led(devices[0], dwPage, i, -1);
                 }
             } else if (ledsArray[i] == "INNER_MARKER"){
                 if(SimConnect_Data->inner_marker == 1){
-                    x52Flash(i, 1, 3);
+                    x52output.x52Flash(i, 1, 3);
                 } else {
-                    x52Flash(i, 0, 0);
+                    x52output.x52Flash(i, 0, 0);
                     x52output.color_led(devices[0], dwPage, i,-1);
                 }
             } else if (ledsArray[i] == "MIDDLE_MARKER"){
                 if(SimConnect_Data->middle_marker == 1){
-                    x52Flash(i, 1, 3);
+                    x52output.x52Flash(i, 1, 3);
                 } else {
-                    x52Flash(i, 0, 0);
+                    x52output.x52Flash(i, 0, 0);
                     x52output.color_led(devices[0], dwPage, i,-1);
                 }
             } else if (ledsArray[i] == "OUTER_MARKER"){
                 if(SimConnect_Data->outer_marker == 1){
-                    x52Flash(i, 1, 3);
+                    x52output.x52Flash(i, 1, 3);
                 } else {
-                    x52Flash(i, 0, 0);
+                    x52output.x52Flash(i, 0, 0);
                     x52output.color_led(devices[0], dwPage, i,-1);
                 }
             } else if (ledsArray[i] == "SPOILERS_ARMED"){
@@ -411,7 +344,7 @@ void MainWindow::mfdPrintLines(){
             swprintf_s(txt, L"");
         }
         int txtsize = std::wcslen (txt);
-        DirectOutput_SetString(devices[0], dwPage, i, txtsize, txt);
+        x52output.setString(devices[0], dwPage, i, txtsize, txt);
     }
 }
 
@@ -493,11 +426,8 @@ MainWindow::MainWindow(QWidget *parent)
     QString def = ui->profil_comboBox->currentText();
     XMLretrievButtons(ui, "plane", def);
 
-    const wchar_t * name = L"X52_plugin";
-    DirectOutput_Initialize(name);
-    DirectOutput_RegisterDeviceCallback(*DirectOutput_Device_Callback, nullptr);
-    DirectOutput_Enumerate(*DirectOutput_Enumerate_Callback, nullptr);
-    x52output.init(devices[0], dwPage);
+    x52output.init(L"X52_plugin");
+    x52output.addPage(devices[0], dwPage);
     x52output.color_led(devices[0], dwPage, 0, 1);
 
 
@@ -522,7 +452,7 @@ MainWindow::MainWindow(QWidget *parent)
 MainWindow::~MainWindow()
 {
     delete ui;
-    DirectOutput_Deinitialize();
+    x52output.deInit();
 }
 
 void MainWindow::autoconnect_timer()
