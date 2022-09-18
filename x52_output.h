@@ -8,8 +8,9 @@
 class x52_output
 {
 public:
-    void init(void* hDevice, DWORD dwPage, const wchar_t * name);
+    void init(const wchar_t * name);
     void deInit(void);
+    void addPage(void* hDevice, DWORD dwPage);
     void intro_msg(void* hDevice, DWORD dwPage);
     void writeLine(void* hDevice, DWORD dwPage, uint8_t line, const wchar_t * txt);
     void clear_led(void * hDevice, DWORD dwPage);

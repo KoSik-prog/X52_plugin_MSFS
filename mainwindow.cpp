@@ -79,7 +79,7 @@ QStringList MFD_FUNCTIONS = {
 
 uint8_t autocon_time = 0;
 // ------------ DATA FOR X52 --------------------------------------------------------
-std::vector<void*> devices;
+extern std::vector<void*> devices;
 x52_output x52output;
 DWORD dwPage = 1;
 QVector<QString> mfdLine {"AP_CRS1", "AP_HDG", "AP_VS"};
@@ -426,9 +426,8 @@ MainWindow::MainWindow(QWidget *parent)
     QString def = ui->profil_comboBox->currentText();
     XMLretrievButtons(ui, "plane", def);
 
-    const wchar_t * name = L"X52_plugin";
-    DirectOutput_Initialize(name);
-    x52output.init(devices[0], dwPage, name);
+    x52output.init(L"X52_plugin");
+    x52output.addPage(devices[0], dwPage);
     x52output.color_led(devices[0], dwPage, 0, 1);
 
 

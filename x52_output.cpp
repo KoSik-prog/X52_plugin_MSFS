@@ -4,9 +4,11 @@
 #include "DirectOutput.h"
 #include "leds.h"
 
+std::vector<void*> devices;
+
 void __stdcall DirectOutput_Device_Callback(void* hDevice, bool bAdded, void* pvContext) {
     if (bAdded) {
-        //devices.push_back(hDevice);
+        devices.push_back(hDevice);
         qDebug() << "DeviceCallback: " << pvContext;
     }
     else {
@@ -15,7 +17,7 @@ void __stdcall DirectOutput_Device_Callback(void* hDevice, bool bAdded, void* pv
 }
 
 void __stdcall DirectOutput_Enumerate_Callback(void* hDevice, void* pvContext) {
-    //devices.push_back(hDevice);
+    devices.push_back(hDevice);
     qDebug() << "Enumerate: " << pvContext;
 }
 
@@ -31,17 +33,20 @@ void __stdcall DirectOutput_Enumerate_Callback(void* hDevice, void* pvContext) {
     }
 }*/
 
-void x52_output::init(void* hDevice, DWORD dwPage, const wchar_t * name){
+void x52_output::init(const wchar_t * name){
     DirectOutput_Initialize(name);
     DirectOutput_RegisterDeviceCallback(*DirectOutput_Device_Callback, nullptr);
     DirectOutput_Enumerate(*DirectOutput_Enumerate_Callback, nullptr);
-    const wchar_t * pageDebugName = L"X52_page";
-    DirectOutput_AddPage(hDevice, dwPage, pageDebugName, FLAG_SET_AS_ACTIVE);
-    intro_msg(hDevice, dwPage);
 }
 
 void x52_output::deInit(void){
     DirectOutput_Deinitialize();
+}
+
+void x52_output::addPage(void* hDevice, DWORD dwPage){
+    const wchar_t * pageDebugName = L"X52_page";
+    DirectOutput_AddPage(hDevice, dwPage, pageDebugName, FLAG_SET_AS_ACTIVE);
+    intro_msg(hDevice, dwPage);
 }
 
 void x52_output::intro_msg(void* hDevice, DWORD dwPage)
