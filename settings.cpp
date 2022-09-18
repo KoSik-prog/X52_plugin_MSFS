@@ -63,7 +63,7 @@ void settings::get_functions(QString tag, QString name){
     mfdArray.clear();
     QDomElement root = document.firstChildElement();
     QDomNodeList plane = root.elementsByTagName(tag);
-
+    qDebug() << "reading settings for plane: " << name;
     for(int i = 0; i < plane.count(); i++)
     {
         QDomNode planenode = plane.at(i);
@@ -120,7 +120,7 @@ void settings::create_newProfile(QString name, QStringList settingsArray){
     btns.setAttribute("name",name);
     root.appendChild(btns);
     //------------------------------------------------------------------
-    setAttribute(doc, btns, "LED_FIRE", settingsArray.at(0), 0);//     ui_pointer->fire_comboBox->currentText(), 0);
+    setAttribute(doc, btns, "LED_FIRE", settingsArray.at(0), 0);
     setAttribute(doc, btns, "LED_FIRE_A", settingsArray.at(1), 0);
     setAttribute(doc, btns, "LED_FIRE_B", settingsArray.at(2), 0);
     setAttribute(doc, btns, "LED_FIRE_D", settingsArray.at(3), 0);

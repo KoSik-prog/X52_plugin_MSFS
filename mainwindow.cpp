@@ -411,10 +411,29 @@ void XMLretrievButtons(Ui::MainWindow *ui_pointer, QString tag, QString name){
     ui_pointer->mfd3_comboBox->setCurrentIndex(ui_pointer->mfd3_comboBox->findText(mfdArray.at(2)));
 }
 
-void XMLcreateNewProfile(QString name){
+void XMLcreateNewProfile(Ui::MainWindow *ui_pointer, QString name){
     settingsArray.clear();
+    buttonsArray.clear();
+    mfdArray.clear();
+
+    buttonsArray.append(ui_pointer->fire_comboBox->currentText());
+    buttonsArray.append(ui_pointer->fireA_comboBox->currentText());
+    buttonsArray.append(ui_pointer->fireB_comboBox->currentText());
+    buttonsArray.append(ui_pointer->fireD_comboBox->currentText());
+    buttonsArray.append(ui_pointer->fireE_comboBox->currentText());
+    buttonsArray.append(ui_pointer->toggle12_comboBox->currentText());
+    buttonsArray.append(ui_pointer->toggle34_comboBox->currentText());
+    buttonsArray.append(ui_pointer->toggle56_comboBox->currentText());
+    buttonsArray.append(ui_pointer->pov2_comboBox->currentText());
+    buttonsArray.append(ui_pointer->clutch_comboBox->currentText());
+    buttonsArray.append(ui_pointer->throttle_comboBox->currentText());
+    mfdArray.append(ui_pointer->mfd1_comboBox->currentText());
+    mfdArray.append(ui_pointer->mfd2_comboBox->currentText());
+    mfdArray.append(ui_pointer->mfd3_comboBox->currentText());
+
     settingsArray.append(buttonsArray);
     settingsArray.append(mfdArray);
+    qDebug() << "ble:" << settingsArray;
     xmlSettings.create_newProfile(name, settingsArray);
 }
 //======================   SIMCONNECT SEND / RECEIVE OPERATION   ==========================
@@ -566,7 +585,7 @@ void MainWindow::on_addProfile_pushButton_clicked(){
                                              &ok);
         if (ok && !text.isEmpty()){
             qDebug() << "new profile: " << text;
-            XMLcreateNewProfile(text);
+            XMLcreateNewProfile(ui, text);
 
         }
         XMLretrievProfiles(ui);
@@ -603,7 +622,7 @@ void MainWindow::on_save_Button_clicked()
     QString nazwaProfilu;
     nazwaProfilu = ui->profil_comboBox->currentText();
     xmlSettings.remove_profile(nazwaProfilu);
-    XMLcreateNewProfile(nazwaProfilu);
+    XMLcreateNewProfile(ui, nazwaProfilu);
     QMessageBox msgBox;
     msgBox.setWindowTitle("X52 plugin");
     msgBox.setText("        Settings are saved             ");
