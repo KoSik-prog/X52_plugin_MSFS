@@ -9,7 +9,7 @@ extern QStringList mfdArray;
 
 void settings::get_planes(QString tag, QString att){
     QDomDocument document;
-    QFile file("settings.xml");
+    QFile file(get_filePath() + "/settings.xml");
         if(!file.open(QIODevice::ReadOnly | QIODevice::Text))
         {
             qDebug() << "Failed to open the file for reading.";
@@ -45,7 +45,7 @@ void settings::get_planes(QString tag, QString att){
 
 void settings::get_functions(QString tag, QString name){
     QDomDocument document;
-    QFile file("settings.xml");
+    QFile file(get_filePath() + "/settings.xml");
 
     if(!file.open(QIODevice::ReadOnly | QIODevice::Text))
     {
@@ -101,7 +101,7 @@ void settings::get_functions(QString tag, QString name){
 
 void settings::create_newProfile(QString name, QStringList settingsArray){
     QDomDocument doc;
-    QFile file("settings.xml");
+    QFile file(get_filePath() + "/settings.xml");
     if(!file.open(QIODevice::ReadOnly | QIODevice::Text))
     {
         qDebug() << "Failed to open the file for reading.";
@@ -136,7 +136,8 @@ void settings::create_newProfile(QString name, QStringList settingsArray){
     setAttribute(doc, btns, "2", settingsArray.at(13), 1);
     //------------------------------------------------------------------
 
-    QFile file2("settings.xml");
+    qDebug() << "zapis";
+    QFile file2(get_filePath() + "/settings.xml");
     if(file2.open(QFile::WriteOnly | QFile::Text)){
         QTextStream in(&file2);
         in<<doc.toString();
@@ -167,7 +168,7 @@ void settings::setAttribute(QDomDocument doc, QDomElement btnsFile, QString name
 
 void settings::remove_profile(QString name){
     QDomDocument doc;
-    QFile file("settings.xml");
+    QFile file(get_filePath() + "/settings.xml");
         if(!file.open(QIODevice::ReadOnly | QIODevice::Text))
         {
             qDebug() << "Failed to open the file for reading.";
@@ -204,3 +205,12 @@ void settings::remove_profile(QString name){
             file.close();
         } else qDebug()<<"file open failed.";
 }
+
+QString settings::get_filePath(void){
+    QSettings Settings("HKEY_CURRENT_USER\\Software\\MSFS Plugin\\X52", QSettings::NativeFormat);
+    QString programPath = Settings.value("path").toString();
+    programPath.replace('\\','/');
+    qDebug() << "Program path: " << programPath;
+    return programPath;
+}
+

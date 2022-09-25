@@ -14,6 +14,7 @@ public:
     void create_newProfile(QString name, QStringList settingsArray);
     void setAttribute(QDomDocument doc, QDomElement btnsFile, QString name, QString function, uint8_t type);
     void remove_profile(QString name);
+    QString get_filePath(void);
 };
 
 #endif // SETTINGS_H

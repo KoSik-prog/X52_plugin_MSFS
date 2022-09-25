@@ -11,6 +11,7 @@
 #include <QMessageBox>
 #include <QSpacerItem>
 #include <QGridLayout>
+#include <QSettings>
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include "x52_output.h"
@@ -433,7 +434,6 @@ void XMLcreateNewProfile(Ui::MainWindow *ui_pointer, QString name){
 
     settingsArray.append(buttonsArray);
     settingsArray.append(mfdArray);
-    qDebug() << "ble:" << settingsArray;
     xmlSettings.create_newProfile(name, settingsArray);
 }
 //======================   SIMCONNECT SEND / RECEIVE OPERATION   ==========================
@@ -481,7 +481,7 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-    QPixmap pm(QApplication::applicationDirPath()+"/x52.png");
+    QPixmap pm(xmlSettings.get_filePath() + "/assets/x52.png");
     ui->image_label->setPixmap(pm);
     ui->image_label->setScaledContents(false);
     ui->image_label->setGeometry(30, 100, pm.width(), pm.height());
@@ -531,9 +531,9 @@ MainWindow::MainWindow(QWidget *parent)
     TimerSimconnectReader = new QTimer(this);
     connect(TimerSimconnectReader, SIGNAL(timeout()), this, SLOT(readSimmconnectData()));
 
-    TimerFlash = new QTimer(this);
-    connect(TimerFlash, SIGNAL(timeout()), this, SLOT(x52_flash()));
-    TimerFlash->start(80);
+    //TimerFlash = new QTimer(this);
+    //connect(TimerFlash, SIGNAL(timeout()), this, SLOT(x52_flash()));
+    //TimerFlash->start(80);
 
     TimerMFDrefresh = new QTimer(this);
     connect(TimerMFDrefresh, SIGNAL(timeout()), this, SLOT(mfdPrintLines()));
@@ -541,7 +541,7 @@ MainWindow::MainWindow(QWidget *parent)
     TimerAutoconnect = new QTimer(this); // auto connection timer
     connect(TimerAutoconnect, SIGNAL(timeout()), this, SLOT(autoconnect_timer()));
     if(ui->autoconnect_checkBox->isChecked()){
-        autocon_time = 10;
+        autocon_time = 40;
         TimerAutoconnect->start(1000);
     }
 }
